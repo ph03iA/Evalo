@@ -9,18 +9,18 @@ const syncUser = inngest.createFunction(
     {event: "clerk/user.created"},
     async ({event}) => {
         await connectDB()
-        const {id, email_addresses, first_name, last_name, image_url} = event.data
+        // Clerk webhook payload has user data nested in event.data.data
+        const userData = event.data.data
+        const {id, email_addresses, first_name, last_name, image_url} = userData
 
         const newUser = {
             clerkId: id,
-            email: email_addresses[0]?.email_address,
+            email: email_addresses?.[0]?.email_address,
             name: `${first_name || ""} ${last_name || ""}`.trim(),
-            profilePicture: image_url
+            profilePicture: image_url || ""
         }
 
         await User.create(newUser);
-
-        //to do sometging else
     }
     
 )
@@ -30,11 +30,9 @@ const deleteUserFromDB = inngest.createFunction(
     {event: "clerk/user.deleted"},
     async ({event}) => {
         await connectDB()
-        const {id} = event.data
+        // Clerk webhook payload has user data nested in event.data.data
+        const {id} = event.data.data
         await User.deleteOne({clerkId:id})
-
-        //todo something else
-
     }
     
 );
