@@ -13,7 +13,7 @@ const UserSchema = new mongoose.Schema(
 
         profilePicture: {
             type: String,
-            deafault: ""
+            default: ""
         },
         clerkId: {
             type:String,
