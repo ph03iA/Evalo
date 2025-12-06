@@ -4,7 +4,7 @@ import { ENV } from "./lib/env.js"
 import { connectDB } from "./lib/db.js"
 import cors from "cors"
 import {serve} from "inngest/express"
-import {inngest} from "./lib/injest.js"
+import {inngest, functions} from "./lib/injest.js"
 
 const app = express();
 
