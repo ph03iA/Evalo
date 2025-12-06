@@ -3,8 +3,8 @@ import path from "path"
 import { ENV } from "./lib/env.js"
 import { connectDB } from "./lib/db.js"
 import cors from "cors"
-import {serve} from "inngest/express"
-import {inngest, functions} from "./lib/injest.js"
+import { serve } from "inngest/express"
+import { inngest, functions } from "./lib/injest.js"
 
 const app = express();
 
@@ -13,9 +13,9 @@ const __dirname = path.resolve();
 //middleware
 app.use(express.json());
 //credentials:true means?? => server allows browser to include cookies on req
-app.use(cors({origin:ENV.CLIENT_URL, credentials:true }));
+app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
 
-app.use("/api/inngest", serve({client:inngest, functions}));
+app.use("/api/inngest", serve({ client: inngest, functions }));
 
 app.get("/health", (req, res) => {
     res.status(200).json({
@@ -31,10 +31,12 @@ app.get("/books", (req, res) => {
 
 //make ready for deployment
 if (ENV.NODE_ENV === "production") {
-    app.use(express.static(path.join(__dirname, "../frontend/dist")));
+    const output = path.join(__dirname, "../frontend/dist");
+    console.log("Serving static files from:", output);
+    app.use(express.static(output));
 
-    app.get("/{*any}", (req, res) => {
-        res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"))
+    app.get("*", (req, res) => {
+        res.sendFile(path.join(output, "index.html"))
     })
 }
 
