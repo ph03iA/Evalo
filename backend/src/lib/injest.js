@@ -9,9 +9,8 @@ const syncUser = inngest.createFunction(
     {event: "clerk/user.created"},
     async ({event}) => {
         await connectDB()
-        // Clerk webhook payload has user data nested in event.data.data
-        const userData = event.data.data
-        const {id, email_addresses, first_name, last_name, image_url} = userData
+        // User data is directly in event.data
+        const {id, email_addresses, first_name, last_name, image_url} = event.data
 
         const newUser = {
             clerkId: id,
@@ -30,8 +29,8 @@ const deleteUserFromDB = inngest.createFunction(
     {event: "clerk/user.deleted"},
     async ({event}) => {
         await connectDB()
-        // Clerk webhook payload has user data nested in event.data.data
-        const {id} = event.data.data
+        // User data is directly in event.data
+        const {id} = event.data
         await User.deleteOne({clerkId:id})
     }
     
