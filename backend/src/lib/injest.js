@@ -6,13 +6,13 @@ export const inngest = new Inngest({id: "evalo"});
 
 const syncUser = inngest.createFunction(
     {id:"sync-user"},
-    {event: "cler/user.created"},
+    {event: "clerk/user.created"},
     async ({event}) => {
         await connectDB()
         const {id, email_address, first_name, last_name, image_url} = event.data
 
         const newUser = {
-            clerId: id,
+            clerkId: id,
             email: email_address[0]?.email_address,
             name: `${first_name || ""} ${last_name || ""}`,
             profilePicture: image_url
@@ -27,11 +27,11 @@ const syncUser = inngest.createFunction(
 
 const deleteUserFromDB = inngest.createFunction(
     {id:"delete-user-from-db"},
-    {event: "cler/user.deleted"},
+    {event: "clerk/user.deleted"},
     async ({event}) => {
         await connectDB()
         const {id} = event.data
-        await User.deleteOne({clerId:id})
+        await User.deleteOne({clerkId:id})
 
         //todo something else
 

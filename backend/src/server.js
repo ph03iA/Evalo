@@ -31,12 +31,10 @@ app.get("/books", (req, res) => {
 
 //make ready for deployment
 if (ENV.NODE_ENV === "production") {
-    const output = path.join(__dirname, "../frontend/dist");
-    console.log("Serving static files from:", output);
-    app.use(express.static(output));
+    app.use(express.static(path.join(__dirname, "../frontend/dist")));
 
-    app.get("*", (req, res) => {
-        res.sendFile(path.join(output, "index.html"))
+    app.get("/{*any}", (req, res) => {
+        res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"))
     })
 }
 
