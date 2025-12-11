@@ -1,25 +1,24 @@
-import './App.css'
-import { SignInButton, SignedOut, SignedIn, SignOutButton, UserButton } from '@clerk/clerk-react'
+import { Routes, Route, Navigate } from 'react-router'
+import { useUser } from '@clerk/clerk-react'
+import HomePage from './pages/HomePage'
+import ProblemsPage from './pages/ProblemsPage'
+import { Toaster } from 'react-hot-toast';
 
 function App() {
-
+  const { isSignedIn } = useUser();
   return (
     <>
-      <h1>Welcome to Evalo</h1>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/problems" element={isSignedIn ? <ProblemsPage /> : <Navigate to={"/"} />}></Route>
+      </Routes>
+      
 
-      <SignedOut>
-        <SignInButton mode="modal" >
-          <button>Log In</button>
-        </SignInButton>
-      </SignedOut>
-
-      <SignedIn>
-        <SignOutButton />
-      </SignedIn>
-
-      <UserButton />
+      <Toaster toastOptions={{duration: 3000}}/>
     </>
   );
 }
 
 export default App
+// tw, diasy ui, react-router, react-hot-toast,
+// todo: react query aka tanstack query. axios
