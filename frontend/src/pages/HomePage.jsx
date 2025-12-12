@@ -8,6 +8,10 @@ import {
 function HomePage() {
   const navigate = useNavigate();
 
+  const handleDashboard = () => {
+    navigate("/dashboard");
+  };
+
   const handleGetStarted = () => {
     navigate("/problems");
   };
@@ -55,7 +59,7 @@ function HomePage() {
 
              <SignedIn>
                <button 
-                 onClick={handleGetStarted}
+                 onClick={handleDashboard}
                  className="bg-white text-black px-6 py-2 rounded-lg hover:bg-zinc-200 transition-all hover:scale-[1.02] active:scale-[0.98] font-semibold tracking-wide shadow-lg shadow-white/5 cursor-pointer"
                >
                   Dashboard
