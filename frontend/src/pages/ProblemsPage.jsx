@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from "react-router";
 import { Terminal, Search, ArrowUpRight, Filter } from "lucide-react";
 import { PROBLEMS } from "../data/problems";
@@ -9,6 +9,11 @@ function ProblemsPage() {
   const problems = Object.values(PROBLEMS);
   const [hoveredId, setHoveredId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Scroll to top when page loads
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const easyProblemsCount = problems.filter((p) => p.difficulty === "Easy").length;
   const mediumProblemsCount = problems.filter((p) => p.difficulty === "Medium").length;
