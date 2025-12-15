@@ -5,6 +5,8 @@ import { PROBLEMS } from "../data/problems";
 import { getDifficultyColor } from "../lib/utils";
 import Navbar from "../components/Navbar";
 
+
+
 function ProblemsPage() {
   const problems = Object.values(PROBLEMS);
   const [hoveredId, setHoveredId] = useState(null);
@@ -18,6 +20,8 @@ function ProblemsPage() {
   const easyProblemsCount = problems.filter((p) => p.difficulty === "Easy").length;
   const mediumProblemsCount = problems.filter((p) => p.difficulty === "Medium").length;
   const hardProblemsCount = problems.filter((p) => p.difficulty === "Hard").length;
+
+  
 
   const filteredProblems = problems.filter(p => 
     p.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
