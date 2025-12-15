@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router";
 import { useUser } from "@clerk/clerk-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "react-hot-toast";
 
 import HomePage from "./pages/HomePage";
 import ProblemsPage from "./pages/ProblemsPage";
@@ -22,6 +23,7 @@ function App() {
         <Route path="/problems" element={isSignedIn ? <ProblemsPage /> : <Navigate to="/" />} />
         <Route path="/problem/:id" element={isSignedIn ? <ProblemPage /> : <Navigate to="/" />} />
       </Routes>
+      <Toaster toastOptions={{ duration: 3000 }} />
     </QueryClientProvider>
   );
 }
