@@ -212,6 +212,20 @@ MongoDB is used for storing sessions and user data. Ensure your MongoDB connecti
 
 ## 🚢 Deployment
 
+### Render Free Keep-Alive
+
+Render free web services spin down after 15 minutes without inbound traffic. Evalo automatically enables a lightweight keep-alive ping on Render web services and requests `/health` every 10 minutes using Render's `RENDER_EXTERNAL_URL`.
+
+Optional environment variables:
+
+```env
+KEEP_ALIVE_ENABLED=true
+KEEP_ALIVE_URL=https://your-service.onrender.com
+KEEP_ALIVE_INTERVAL_MS=600000
+```
+
+Set `KEEP_ALIVE_ENABLED=false` to turn it off. Keeping a free service warm consumes free instance hours, so a paid Render instance is still the better option for production traffic.
+
 ### Build for Production
 
 ```bash
