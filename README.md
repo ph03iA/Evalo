@@ -76,9 +76,10 @@ Evalo is a modern platform for conducting technical interviews with real-time co
    PORT=3000
    DB_URL=your_mongodb_connection_string
    CLIENT_URL=http://localhost:5173
-   VITE_API_URL=http://localhost:3000
+   VITE_API_URL=http://localhost:3000/api
    
    # Clerk Configuration
+   CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
    CLERK_SECRET_KEY=your_clerk_secret_key
    
    # Stream.io Configuration
@@ -93,7 +94,7 @@ Evalo is a modern platform for conducting technical interviews with real-time co
    Create a `.env` file in the `frontend` directory:
    ```env
    VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-   VITE_API_URL=http://localhost:3000
+   VITE_API_URL=http://localhost:3000/api
    ```
 
 4. **Start the development servers**

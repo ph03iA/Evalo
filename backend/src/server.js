@@ -28,7 +28,10 @@ app.get("/health", (req, res) => {
     })
 });
 
-app.use(clerkMiddleware()); // this will add auth field to rewquest object: req.auth()
+app.use(clerkMiddleware({
+    publishableKey: ENV.CLERK_PUBLISHABLE_KEY,
+    secretKey: ENV.CLERK_SECRET_KEY,
+})); // this will add auth field to rewquest object: req.auth()
 app.use("/api/inngest", serve({ client: inngest, functions }));
 app.use("/api/chat", chatRoutes);
 app.use("/api/sessions", sessionRoutes);
@@ -43,6 +46,19 @@ if (ENV.NODE_ENV === "production") {
         res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"))
     })
 }
+
+app.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+
+    console.error("Unhandled request error", error);
+
+    const statusCode = error.statusCode || error.status || 500;
+    const isProduction = ENV.NODE_ENV === "production";
+
+    res.status(statusCode).json({
+        message: isProduction ? "Internal Server Error" : error.message || "Internal Server Error"
+    });
+});
 
 
 const startServer = async () => {

@@ -115,6 +115,10 @@ export async function joinSession(req, res) {
         }
         //check if session is already full
         if (session.participant) {
+            if (session.participant.toString() === userId.toString()) {
+                return res.status(200).json({ session, alreadyJoined: true });
+            }
+
             return res.status(409).json({ message: "Session is already full." });
         }
         session.participant = userId;
