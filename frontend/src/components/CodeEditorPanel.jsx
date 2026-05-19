@@ -1,6 +1,59 @@
 import Editor from "@monaco-editor/react";
 import { Loader2, Play, RefreshCw, Code2, ChevronDown } from "lucide-react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { LANGUAGE_CONFIG } from "../data/problems";
+
+const EDITOR_OPTIONS = {
+    fontSize: 14,
+    fontFamily: "'JetBrains Mono', monospace",
+    lineNumbers: "on",
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    automaticLayout: true,
+    padding: { top: 20 },
+    cursorSmoothCaretAnimation: "on",
+    renderLineHighlight: "all",
+    smoothScrolling: true,
+    scrollbar: {
+        verticalScrollbarSize: 8,
+        horizontalScrollbarSize: 8,
+    },
+};
+
+const CURSOR_COLORS = [
+    { color: "#34d399", selection: "rgba(52, 211, 153, 0.24)", text: "#022c22" },
+    { color: "#60a5fa", selection: "rgba(96, 165, 250, 0.24)", text: "#061b3a" },
+    { color: "#f472b6", selection: "rgba(244, 114, 182, 0.24)", text: "#3b0622" },
+    { color: "#fbbf24", selection: "rgba(251, 191, 36, 0.24)", text: "#2d1f02" },
+    { color: "#a78bfa", selection: "rgba(167, 139, 250, 0.24)", text: "#21124a" },
+    { color: "#2dd4bf", selection: "rgba(45, 212, 191, 0.24)", text: "#042f2e" },
+];
+
+const hashValue = (value) => {
+    const text = String(value || "participant");
+    let hash = 0;
+
+    for (let index = 0; index < text.length; index += 1) {
+        hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+    }
+
+    return hash;
+};
+
+const getCursorPresentation = (id) => {
+    const hash = hashValue(id);
+    const colorSet = CURSOR_COLORS[hash % CURSOR_COLORS.length];
+
+    return {
+        ...colorSet,
+        className: `evalo-remote-cursor-${hash.toString(36)}`,
+    };
+};
+
+const getCursorDisplayName = (name) => {
+    const displayName = String(name || "Participant").trim();
+    return displayName.length > 32 ? `${displayName.slice(0, 29)}...` : displayName || "Participant";
+};
 
 function CodeEditorPanel({
     selectedLanguage,
@@ -8,9 +61,313 @@ function CodeEditorPanel({
     isRunning,
     onLanguageChange,
     onCodeChange,
+    onCursorChange,
     onRunCode,
     onReset,
+    remoteCursors = [],
 }) {
+    const editorRef = useRef(null);
+    const monacoRef = useRef(null);
+    const cursorDecorationsRef = useRef(null);
+    const cursorDecorationIdsRef = useRef([]);
+    const cursorWidgetsRef = useRef(new Map());
+    const cursorStyleElementRef = useRef(null);
+    const editorDisposablesRef = useRef([]);
+    const isApplyingExternalValueRef = useRef(false);
+
+    const syncCursorStyles = useCallback((presentations) => {
+        if (typeof document === "undefined") return;
+
+        if (!cursorStyleElementRef.current) {
+            const styleElement = document.createElement("style");
+            styleElement.setAttribute("data-evalo-remote-cursors", "true");
+            document.head.appendChild(styleElement);
+            cursorStyleElementRef.current = styleElement;
+        }
+
+        cursorStyleElementRef.current.textContent = Array.from(presentations.values())
+            .map(
+                ({ className, color, selection }) => `
+.monaco-editor .evalo-remote-cursor-caret.${className} {
+    border-left-color: ${color};
+    box-shadow: 0 0 10px ${selection};
+}
+
+.monaco-editor .evalo-remote-selection.${className} {
+    background: ${selection};
+}
+`
+            )
+            .join("\n");
+    }, []);
+
+    const clampPosition = useCallback((position) => {
+        const editor = editorRef.current;
+        const model = editor?.getModel();
+        if (!model || !position) return null;
+
+        const lineNumber = Math.min(Math.max(Number(position.lineNumber) || 1, 1), model.getLineCount());
+        const column = Math.min(Math.max(Number(position.column) || 1, 1), model.getLineMaxColumn(lineNumber));
+
+        return { lineNumber, column };
+    }, []);
+
+    const getNormalizedSelectionRange = useCallback((selection, monaco) => {
+        if (!selection) return null;
+
+        const startPosition = clampPosition({
+            lineNumber: selection.startLineNumber,
+            column: selection.startColumn,
+        });
+        const endPosition = clampPosition({
+            lineNumber: selection.endLineNumber,
+            column: selection.endColumn,
+        });
+
+        if (!startPosition || !endPosition) return null;
+        if (startPosition.lineNumber === endPosition.lineNumber && startPosition.column === endPosition.column) {
+            return null;
+        }
+
+        return new monaco.Range(
+            startPosition.lineNumber,
+            startPosition.column,
+            endPosition.lineNumber,
+            endPosition.column
+        );
+    }, [clampPosition]);
+
+    const updateLocalCursor = useCallback(() => {
+        const editor = editorRef.current;
+        const position = editor?.getPosition();
+        const selection = editor?.getSelection();
+
+        if (!position || !selection) return;
+
+        onCursorChange?.({
+            position: {
+                lineNumber: position.lineNumber,
+                column: position.column,
+            },
+            selection: {
+                startLineNumber: selection.startLineNumber,
+                startColumn: selection.startColumn,
+                endLineNumber: selection.endLineNumber,
+                endColumn: selection.endColumn,
+            },
+        });
+    }, [onCursorChange]);
+
+    const updateCursorWidgetNode = useCallback((node, cursor, presentation) => {
+        const label = node.querySelector("[data-cursor-label]");
+
+        node.className = `evalo-remote-cursor-label ${presentation.className}`;
+        node.style.setProperty("--evalo-cursor-color", presentation.color);
+        node.style.setProperty("--evalo-cursor-text", presentation.text);
+
+        if (label) {
+            label.textContent = getCursorDisplayName(cursor.name);
+        }
+    }, []);
+
+    const getCursorWidget = useCallback((cursor, presentation) => {
+        const editor = editorRef.current;
+        const monaco = monacoRef.current;
+        if (!editor || !monaco) return null;
+
+        const widgetId = `evalo-remote-cursor-${cursor.id}`;
+        const existingWidget = cursorWidgetsRef.current.get(cursor.id);
+
+        if (existingWidget) {
+            updateCursorWidgetNode(existingWidget.node, cursor, presentation);
+            return existingWidget;
+        }
+
+        const node = document.createElement("div");
+        const label = document.createElement("span");
+        label.setAttribute("data-cursor-label", "true");
+        node.appendChild(label);
+        updateCursorWidgetNode(node, cursor, presentation);
+
+        const widget = {
+            node,
+            position: cursor.position,
+            getId: () => widgetId,
+            getDomNode: () => node,
+            getPosition: () => ({
+                position: widget.position,
+                preference: [
+                    monaco.editor.ContentWidgetPositionPreference.ABOVE,
+                    monaco.editor.ContentWidgetPositionPreference.EXACT,
+                ],
+            }),
+        };
+
+        cursorWidgetsRef.current.set(cursor.id, widget);
+        editor.addContentWidget(widget);
+
+        return widget;
+    }, [updateCursorWidgetNode]);
+
+    const applyExternalValue = useCallback((nextValue) => {
+        const editor = editorRef.current;
+        if (!editor || typeof nextValue !== "string") return;
+
+        const model = editor.getModel();
+        if (!model || model.getValue() === nextValue) return;
+
+        const position = editor.getPosition();
+        const scrollTop = editor.getScrollTop();
+        const scrollLeft = editor.getScrollLeft();
+
+        isApplyingExternalValueRef.current = true;
+        editor.executeEdits("external-sync", [
+            {
+                range: model.getFullModelRange(),
+                text: nextValue,
+            },
+        ]);
+
+        if (position) {
+            const lineNumber = Math.min(position.lineNumber, model.getLineCount());
+            const column = Math.min(position.column, model.getLineMaxColumn(lineNumber));
+            editor.setPosition({ lineNumber, column });
+        }
+
+        editor.setScrollTop(scrollTop);
+        editor.setScrollLeft(scrollLeft);
+
+        window.setTimeout(() => {
+            isApplyingExternalValueRef.current = false;
+        }, 0);
+    }, []);
+
+    useEffect(() => {
+        applyExternalValue(code || "");
+    }, [applyExternalValue, code]);
+
+    useEffect(() => {
+        const editor = editorRef.current;
+        const monaco = monacoRef.current;
+        const model = editor?.getModel();
+
+        if (!editor || !monaco || !model) return;
+
+        const visibleCursorIds = new Set();
+        const visibleCursorPresentations = new Map();
+        const decorations = [];
+
+        remoteCursors
+            .forEach((cursor) => {
+                const position = clampPosition(cursor.position);
+                if (!position) return;
+
+                visibleCursorIds.add(cursor.id);
+                const presentation = getCursorPresentation(cursor.id);
+                visibleCursorPresentations.set(presentation.className, presentation);
+
+                const selectionRange = getNormalizedSelectionRange(cursor.selection, monaco);
+                if (selectionRange) {
+                    decorations.push({
+                        range: selectionRange,
+                        options: {
+                            className: `evalo-remote-selection ${presentation.className}`,
+                        },
+                    });
+                }
+
+                decorations.push({
+                    range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+                    options: {
+                        beforeContentClassName: `evalo-remote-cursor-caret ${presentation.className}`,
+                        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+                    },
+                });
+
+                const widget = getCursorWidget({
+                    ...cursor,
+                    name: getCursorDisplayName(cursor.name),
+                    position,
+                }, presentation);
+
+                if (widget) {
+                    widget.position = position;
+                    editor.layoutContentWidget(widget);
+                }
+            });
+
+        cursorWidgetsRef.current.forEach((widget, cursorId) => {
+            if (!visibleCursorIds.has(cursorId)) {
+                editor.removeContentWidget(widget);
+                cursorWidgetsRef.current.delete(cursorId);
+            }
+        });
+
+        syncCursorStyles(visibleCursorPresentations);
+
+        if (cursorDecorationsRef.current) {
+            cursorDecorationsRef.current.set(decorations);
+        } else {
+            cursorDecorationIdsRef.current = editor.deltaDecorations(cursorDecorationIdsRef.current, decorations);
+        }
+    }, [clampPosition, getCursorWidget, getNormalizedSelectionRange, remoteCursors, selectedLanguage, syncCursorStyles]);
+
+    const handleEditorChange = useCallback(
+        (value) => {
+            if (isApplyingExternalValueRef.current) return;
+            onCodeChange?.(value || "");
+
+            window.setTimeout(updateLocalCursor, 0);
+        },
+        [onCodeChange, updateLocalCursor]
+    );
+
+    const handleEditorMount = useCallback(
+        (editor, monaco) => {
+            editorRef.current = editor;
+            monacoRef.current = monaco;
+            cursorDecorationsRef.current = editor.createDecorationsCollection?.([]);
+
+            // Custom theme to match the app
+            monaco.editor.defineTheme("custom-dark", {
+                base: "vs-dark",
+                inherit: true,
+                rules: [],
+                colors: {
+                    "editor.background": "#0a0a0a",
+                    "editor.lineHighlightBackground": "#18181b",
+                    "editorLineNumber.foreground": "#52525b",
+                },
+            });
+            monaco.editor.setTheme("custom-dark");
+            applyExternalValue(code || "");
+
+            editorDisposablesRef.current.forEach((disposable) => disposable.dispose());
+            editorDisposablesRef.current = [
+                editor.onDidChangeCursorSelection(updateLocalCursor),
+                editor.onDidFocusEditorText(updateLocalCursor),
+                editor.onDidBlurEditorText(updateLocalCursor),
+            ];
+
+            window.setTimeout(updateLocalCursor, 0);
+        },
+        [applyExternalValue, code, updateLocalCursor]
+    );
+
+    const disposeEditorResources = useCallback(() => {
+        editorDisposablesRef.current.forEach((disposable) => disposable.dispose());
+        cursorWidgetsRef.current.forEach((widget) => editorRef.current?.removeContentWidget(widget));
+        cursorWidgetsRef.current.clear();
+        cursorDecorationsRef.current?.clear();
+        cursorStyleElementRef.current?.remove();
+        cursorStyleElementRef.current = null;
+        onCursorChange?.(null);
+    }, [onCursorChange]);
+
+    useEffect(() => {
+        return disposeEditorResources;
+    }, [disposeEditorResources]);
+
     return (
         <div className="h-full flex flex-col bg-[#0a0a0a] rounded-xl overflow-hidden border border-zinc-800">
             {/* Toolbar */}
@@ -77,43 +434,15 @@ function CodeEditorPanel({
                 <Editor
                     height="100%"
                     language={LANGUAGE_CONFIG[selectedLanguage]?.monacoLang}
-                    value={code}
-                    onChange={onCodeChange}
+                    defaultValue={code}
+                    onChange={handleEditorChange}
                     theme="vs-dark"
-                    options={{
-                        fontSize: 14,
-                        fontFamily: "'JetBrains Mono', monospace",
-                        lineNumbers: "on",
-                        minimap: { enabled: false },
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        padding: { top: 20 },
-                        cursorSmoothCaretAnimation: "on",
-                        renderLineHighlight: "all",
-                        smoothScrolling: true,
-                        scrollbar: {
-                            verticalScrollbarSize: 8,
-                            horizontalScrollbarSize: 8,
-                        },
-                    }}
-                    onMount={(editor, monaco) => {
-                        // Custom theme to match the app
-                        monaco.editor.defineTheme('custom-dark', {
-                            base: 'vs-dark',
-                            inherit: true,
-                            rules: [],
-                            colors: {
-                                'editor.background': '#0a0a0a',
-                                'editor.lineHighlightBackground': '#18181b',
-                                'editorLineNumber.foreground': '#52525b',
-                            }
-                        });
-                        monaco.editor.setTheme('custom-dark');
-                    }}
+                    options={EDITOR_OPTIONS}
+                    onMount={handleEditorMount}
                 />
             </div>
         </div>
     );
 }
 
-export default CodeEditorPanel;
+export default memo(CodeEditorPanel);

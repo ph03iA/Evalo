@@ -1,5 +1,5 @@
 import { useUser } from "@clerk/clerk-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useEndSession, useJoinSession, useSessionById } from "../hooks/useSessions";
 import { PROBLEMS } from "../data/problems";
@@ -12,6 +12,7 @@ import CodeEditorPanel from "../components/CodeEditorPanel";
 import OutputPanel from "../components/OutputPanel";
 
 import useStreamClient from "../hooks/useStreamClient";
+import useCollaborativeCode from "../hooks/useCollaborativeCode";
 import { StreamCall, StreamVideo } from "@stream-io/video-react-sdk";
 import VideoCallUI from "../components/VideoCallUI";
 
@@ -21,15 +22,21 @@ function SessionPage() {
     const { user } = useUser();
     const [output, setOutput] = useState(null);
     const [isRunning, setIsRunning] = useState(false);
+    const autoJoinSessionIdRef = useRef(null);
 
     const { data: sessionData, isLoading: loadingSession, refetch } = useSessionById(id);
 
     const joinSessionMutation = useJoinSession();
     const endSessionMutation = useEndSession();
+    const { isPending: isJoiningSession, mutate: joinSession } = joinSessionMutation;
 
     const session = sessionData?.session;
     const isHost = session?.host?.clerkId === user?.id;
     const isParticipant = session?.participant?.clerkId === user?.id;
+    const currentUserName = useMemo(
+        () => user?.fullName || user?.username || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
+        [user?.firstName, user?.fullName, user?.primaryEmailAddress?.emailAddress, user?.username]
+    );
 
     const { call, channel, chatClient, isInitializingCall, streamClient } = useStreamClient(
         session,
@@ -42,51 +49,67 @@ function SessionPage() {
         ? Object.values(PROBLEMS).find((p) => p.title === session.problem)
         : null;
 
-    const [selectedLanguage, setSelectedLanguage] = useState("javascript");
-    const [code, setCode] = useState(problemData?.starterCode?.[selectedLanguage] || "");
-
+    const {
+        code,
+        codeRef,
+        handleCodeChange,
+        handleCursorChange,
+        remoteCursors,
+        changeLanguage,
+        resetCode,
+        selectedLanguage,
+    } = useCollaborativeCode({
+        channel,
+        documentId: session?._id || id,
+        starterCodeByLanguage: problemData?.starterCode,
+        userId: user?.id,
+        userName: currentUserName,
+    });
 
     useEffect(() => {
         if (!session || !user || loadingSession) return;
         if (isHost || isParticipant) return;
         if (session.status === "completed") return; // Don't try to join completed sessions
-        if (joinSessionMutation.isPending) return; // Prevent duplicate calls
+        if (isJoiningSession) return; // Prevent duplicate calls
+        if (autoJoinSessionIdRef.current === id) return;
 
-        joinSessionMutation.mutate(id, { onSuccess: refetch });
-    }, [session, user, loadingSession, isHost, isParticipant, id]);
+        autoJoinSessionIdRef.current = id;
+        joinSession(id, {
+            onSuccess: refetch,
+            onError: () => {
+                autoJoinSessionIdRef.current = null;
+            },
+        });
+    }, [session, user, loadingSession, isHost, isParticipant, id, isJoiningSession, joinSession, refetch]);
 
     useEffect(() => {
         if (!session || loadingSession) return;
         if (session.status === "completed") navigate("/dashboard");
     }, [session, loadingSession, navigate]);
 
-    useEffect(() => {
-        if (problemData?.starterCode?.[selectedLanguage]) {
-            setCode(problemData.starterCode[selectedLanguage]);
-        }
-    }, [problemData, selectedLanguage]);
-
-    const handleLanguageChange = (e) => {
-        const newLang = e.target.value;
-        setSelectedLanguage(newLang);
-        const starterCode = problemData?.starterCode?.[newLang] || "";
-        setCode(starterCode);
+    const handleLanguageChange = useCallback((e) => {
+        changeLanguage(e.target.value);
         setOutput(null);
-    };
+    }, [changeLanguage]);
 
-    const handleRunCode = async () => {
+    const handleResetCode = useCallback(() => {
+        resetCode();
+        setOutput(null);
+    }, [resetCode]);
+
+    const handleRunCode = useCallback(async () => {
         setIsRunning(true);
         setOutput(null);
-        const result = await executeCode(selectedLanguage, code);
+        const result = await executeCode(selectedLanguage, codeRef.current);
         setOutput(result);
         setIsRunning(false);
-    };
+    }, [codeRef, selectedLanguage]);
 
-    const handleEndSession = () => {
+    const handleEndSession = useCallback(() => {
         if (confirm("Are you sure you want to end this session? All participants will be notified.")) {
             endSessionMutation.mutate(id, { onSuccess: () => navigate("/dashboard") });
         }
-    };
+    }, [endSessionMutation, id, navigate]);
 
     return (
         <div className="h-screen bg-[#030303] flex flex-col overflow-hidden">
@@ -225,8 +248,11 @@ function SessionPage() {
                                                 code={code}
                                                 isRunning={isRunning}
                                                 onLanguageChange={handleLanguageChange}
-                                                onCodeChange={(value) => setCode(value)}
+                                                onCodeChange={handleCodeChange}
+                                                onCursorChange={handleCursorChange}
                                                 onRunCode={handleRunCode}
+                                                onReset={handleResetCode}
+                                                remoteCursors={remoteCursors}
                                             />
                                         </div>
                                     </Panel>

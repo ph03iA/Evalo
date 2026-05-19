@@ -3,3 +3,57 @@
 @plugin "daisyui" {
     themes: all;
 }
+
+.monaco-editor .evalo-remote-selection {
+    background: rgba(16, 185, 129, 0.22);
+    border-radius: 2px;
+}
+
+.monaco-editor .evalo-remote-cursor-caret {
+    border-left: 2px solid #34d399;
+    display: inline-block;
+    height: 1.35em;
+    margin-left: -1px;
+    pointer-events: none;
+    position: relative;
+    vertical-align: text-bottom;
+    z-index: 20;
+}
+
+.evalo-remote-cursor-label {
+    align-items: center;
+    background: var(--evalo-cursor-color, #34d399);
+    border-radius: 5px 5px 5px 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    color: var(--evalo-cursor-text, #022c22);
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 700;
+    height: 20px;
+    line-height: 20px;
+    max-width: 160px;
+    overflow: hidden;
+    padding: 0 7px;
+    pointer-events: none;
+    position: relative;
+    text-overflow: ellipsis;
+    transform: translate(-1px, -4px);
+    white-space: nowrap;
+    z-index: 30;
+}
+
+.evalo-remote-cursor-label::after {
+    background: var(--evalo-cursor-color, #34d399);
+    bottom: -13px;
+    content: "";
+    height: 13px;
+    left: 0;
+    position: absolute;
+    width: 2px;
+}
+
+.evalo-remote-cursor-label [data-cursor-label] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
