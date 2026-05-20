@@ -4,7 +4,11 @@ backend/node_modules
 frontend/dist
 .git
 .env
+.env.*
+!.env.docker.example
 backend/.env
+backend/.env.*
 frontend/.env
+frontend/.env.*
 npm-debug.log
 .DS_Store
